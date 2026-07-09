@@ -1,5 +1,4 @@
 # Render Blueprint (infra-as-code lite, SDD §29).
-# In the Render dashboard: New → Blueprint → point at this repo.
 services:
   - type: web
     name: gamenight
@@ -11,4 +10,12 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: DATABASE_URL
-        sync: false   # set manually in dashboard — Neon connection string, never in git
+        sync: false   # Neon connection string — set in dashboard, never in git
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false   # e.g. https://gamenight-xbgu.onrender.com  (no trailing slash)
+      - key: ADMIN_EMAIL
+        sync: false   # your gmail — first login bootstraps as approved admin

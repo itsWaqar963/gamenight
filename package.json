@@ -1,11 +1,11 @@
 {
   "name": "gamenight",
   "private": true,
-  "workspaces": ["server"],
+  "workspaces": ["server", "web"],
   "scripts": {
     "dev": "npm run dev -w server",
-    "build": "npm run build -w server",
+    "build": "npm run build -w web && npm run build -w server",
     "lint": "npm run lint -w server",
-    "typecheck": "npm run typecheck -w server"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web"
   }
 }
