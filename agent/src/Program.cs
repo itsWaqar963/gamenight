@@ -1,5 +1,6 @@
 // Entry point (SDD §12): single instance, link if needed, tray + detectors.
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using Microsoft.Win32;
 
 namespace GameNight.Agent;
