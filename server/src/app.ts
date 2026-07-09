@@ -13,6 +13,7 @@ import type { Db } from './db.js';
 import { registerAuth } from './plugins/auth.js';
 import { registerAuthRoutes } from './modules/auth/routes.js';
 import { registerUserRoutes } from './modules/users/routes.js';
+import { registerDeviceRoutes } from './modules/devices/routes.js';
 
 export function buildApp(config: Config, db: Db | undefined) {
   const app = Fastify({
@@ -37,6 +38,7 @@ export function buildApp(config: Config, db: Db | undefined) {
 
   registerAuthRoutes(app, config, db);
   registerUserRoutes(app, db);
+  registerDeviceRoutes(app, db);
 
   const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
   app.register(fastifyStatic, { root: publicDir });

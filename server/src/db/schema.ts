@@ -1,19 +1,16 @@
 /**
- * Database schema (Drizzle). SDD §9 — Phase 1 slice: users + sessions.
- * Teaching: constraints ARE business rules. `unique` on google_sub means
- * "one account per Google identity" is enforced by Postgres itself —
- * application bugs cannot violate it.
+ * Database schema (Drizzle). SDD §9 — Phase 2 slice: users, sessions, devices.
+ * Teaching: constraints ARE business rules — `unique` on google_sub means
+ * "one account per Google identity" is enforced by Postgres itself.
  */
-import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, boolean } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  // Google's `sub` claim: the STABLE identity key. Emails can change; sub never does.
   googleSub: text('google_sub').notNull().unique(),
   email: text('email').notNull(),
   displayName: text('display_name'),
   avatarUrl: text('avatar_url'),
-  // The entire authorization model (SDD §16) lives in these two columns:
   status: text('status', { enum: ['pending', 'approved', 'rejected', 'banned'] })
     .notNull()
     .default('pending'),
@@ -27,9 +24,6 @@ export const users = pgTable('users', {
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
-  // We store a SHA-256 of the session token, never the token itself.
-  // If the DB ever leaks, the attacker holds hashes — useless for login.
-  // Same principle as hashing passwords, applied to bearer tokens (SDD §24).
   tokenHash: text('token_hash').notNull().unique(),
   userId: uuid('user_id')
     .notNull()
@@ -38,4 +32,20 @@ export const sessions = pgTable('sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
 
+export const devices = pgTable('devices', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(), // e.g. "Zahid-PC" — user-visible machine name
+  // Same rule as sessions: the DB holds a SHA-256; the raw token exists only
+  // on the agent's disk (DPAPI-encrypted) and in transit over TLS.
+  tokenHash: text('token_hash').notNull().unique(),
+  agentVersion: text('agent_version'),
+  lastSeen: timestamp('last_seen', { withTimezone: true }),
+  revoked: boolean('revoked').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
+export type Device = typeof devices.$inferSelect;
