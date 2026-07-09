@@ -4,3 +4,6 @@ server/public/
 *.log
 .env
 .DS_Store
+agent/bin/
+agent/obj/
+dev-env.ps1
