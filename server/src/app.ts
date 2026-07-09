@@ -39,7 +39,7 @@ export function buildApp(config: Config, db: Db | undefined) {
 
   // ---- api v1 (versioned prefix from day one, SDD §10) ----
   app.get('/api/v1/hello', async () => ({
-    message: 'GameNight server is alive',
+    message: 'Hello Daku! GameNight server is alive',
     phase: 0,
   }));
 
