@@ -6,7 +6,7 @@ namespace GameNight.Agent;
 
 public static class AgentInfo
 {
-    public const string Version = "0.3.0";
+    public const string Version = "0.4.0";
 }
 
 // ---- agent → server ----
@@ -58,3 +58,8 @@ public record MetricsMsg([property: JsonPropertyName("t")] string T,
 {
     public static MetricsMsg Create(List<MetricSample> peers) => new("metrics", peers);
 }
+
+// ---- Phase 4: server -> agent toast notification ----
+public record ToastMsg([property: JsonPropertyName("t")] string T,
+                       [property: JsonPropertyName("title")] string Title,
+                       [property: JsonPropertyName("body")] string Body);

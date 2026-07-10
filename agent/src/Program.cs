@@ -37,6 +37,9 @@ internal static class Program
 
         // Phase 3: server sends who to probe → feed the probe engine.
         link.PeersReceived += peers => probes.SetPeers(peers);
+        // Phase 4: server sends toast notifications → show a Windows balloon.
+        // Marshal to the UI thread; NotifyIcon must be touched from there.
+        link.ToastReceived += (title, body) => tray.ShowToast(title, body);
         link.Start();
         probes.Start();
 
