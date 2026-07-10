@@ -5,12 +5,14 @@ namespace GameNight.Agent;
 public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _icon;
+    private readonly ContextMenuStrip _menu;
     private bool _paused;
     public event Action<bool>? PauseToggled;
 
     public TrayIcon(string serverUrl, ServerLink link)
     {
         var menu = new ContextMenuStrip();
+        _menu = menu;
         var status = new ToolStripMenuItem("starting…") { Enabled = false };
         var pause = new ToolStripMenuItem("Pause monitoring");
         menu.Items.Add(status);
@@ -53,6 +55,29 @@ public sealed class TrayIcon : IDisposable
             }
             catch { /* UI cosmetics must NEVER kill the connection loop */ }
         };
+    }
+
+    /// <summary>Show a native Windows toast (balloon tip). Phase 4.</summary>
+    /// Safe to call from any thread — marshals to the UI thread via the menu.
+    public void ShowToast(string title, string body)
+    {
+        void Show()
+        {
+            try
+            {
+                _icon.BalloonTipTitle = title;
+                _icon.BalloonTipText = body;
+                _icon.BalloonTipIcon = ToolTipIcon.Info;
+                _icon.ShowBalloonTip(5000);
+            }
+            catch { /* toast is best-effort; never crash on it */ }
+        }
+        try
+        {
+            if (_menu.InvokeRequired) _menu.BeginInvoke(Show);
+            else Show();
+        }
+        catch { /* if the handle isn't ready, silently skip this toast */ }
     }
 
     public void Dispose()

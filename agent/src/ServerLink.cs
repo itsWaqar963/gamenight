@@ -22,6 +22,7 @@ public sealed class ServerLink : IDisposable
 
     public event Action<string>? StatusChanged; // for the tray tooltip
     public event Action<List<Peer>>? PeersReceived; // Phase 3: probe targets from server
+    public event Action<string, string>? ToastReceived; // Phase 4: (title, body)
 
     public ServerLink(string serverUrl, string token)
     {
@@ -144,6 +145,10 @@ public sealed class ServerLink : IDisposable
                 case "peers":
                     var msg = System.Text.Json.JsonSerializer.Deserialize<PeersMsg>(json);
                     if (msg?.List != null) PeersReceived?.Invoke(msg.List);
+                    break;
+                case "toast":
+                    var toast = System.Text.Json.JsonSerializer.Deserialize<ToastMsg>(json);
+                    if (toast != null) ToastReceived?.Invoke(toast.Title, toast.Body);
                     break;
                 // hello_ok, toasts, updates handled in later phases; unknown types ignored.
             }
