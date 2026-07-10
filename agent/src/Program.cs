@@ -32,11 +32,15 @@ internal static class Program
         RegisterAutostart();
 
         using var link = new ServerLink(config.ServerUrl, token);
+        using var probes = new ProbeEngine();
         using var tray = new TrayIcon(config.ServerUrl, link);
-        link.Start();
 
-        // Detector loop: poll game every 5s, adapters every 30s (+ instantly
-        // on OS network-change events). Timers, never busy loops (SDD §12).
+        // Phase 3: server sends who to probe → feed the probe engine.
+        link.PeersReceived += peers => probes.SetPeers(peers);
+        link.Start();
+        probes.Start();
+
+        // Detector loop: poll game/adapters every 5s. Timers, never busy loops.
         bool paused = false;
         tray.PauseToggled += p => { paused = p; if (p) link.ReportState("idle", RadminDetector.Detect()); };
 
@@ -45,12 +49,19 @@ internal static class Program
         timer.Tick += (_, _) =>
         {
             if (paused) return;
-            radmin = RadminDetector.Detect(); // every 5s — cheap, and catches Radmin connecting after launch
+            radmin = RadminDetector.Detect(); // every 5s — catches Radmin connecting after launch
             string state = GameDetector.IsFarCry2Running() ? "in_game" : "online";
             link.ReportState(state, radmin);
         };
+
+        // Metrics timer: every 30s, summarize the probe windows and report.
+        // (Probes themselves run every 10s inside ProbeEngine.)
+        var metricsTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
+        metricsTimer.Tick += (_, _) => { if (!paused) link.ReportMetrics(probes.Summarize()); };
+
         NetworkChange.NetworkAddressChanged += (_, _) => { radmin = RadminDetector.Detect(); };
         timer.Start();
+        metricsTimer.Start();
         link.ReportState("online", radmin);
 
         Application.Run(); // message loop until tray → Quit

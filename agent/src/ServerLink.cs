@@ -21,6 +21,7 @@ public sealed class ServerLink : IDisposable
     private readonly SemaphoreSlim _sendLock = new(1, 1);
 
     public event Action<string>? StatusChanged; // for the tray tooltip
+    public event Action<List<Peer>>? PeersReceived; // Phase 3: probe targets from server
 
     public ServerLink(string serverUrl, string token)
     {
@@ -109,20 +110,52 @@ public sealed class ServerLink : IDisposable
         }
     }
 
-    private static async Task ReceiveLoopAsync(ClientWebSocket sock, CancellationToken ct)
+    private async Task ReceiveLoopAsync(ClientWebSocket sock, CancellationToken ct)
     {
-        var buf = new byte[4096];
+        // WebSocket messages can span multiple frames; accumulate until EndOfMessage.
+        var buf = new byte[8192];
+        var acc = new System.IO.MemoryStream();
         try
         {
             while (sock.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
                 WebSocketReceiveResult r = await sock.ReceiveAsync(buf, ct);
                 if (r.MessageType == WebSocketMessageType.Close) return;
-                // Phase 2: server→agent messages (peers, toasts) arrive in
-                // later phases; unknown messages are ignored by protocol rule.
+                acc.Write(buf, 0, r.Count);
+                if (!r.EndOfMessage) continue;
+
+                var json = System.Text.Encoding.UTF8.GetString(acc.ToArray());
+                acc.SetLength(0);
+                HandleServerMessage(json);
             }
         }
         catch { /* socket died; outer loop reconnects */ }
+    }
+
+    private void HandleServerMessage(string json)
+    {
+        try
+        {
+            // Peek at the discriminator without a full typed parse.
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("t", out var tEl)) return;
+            switch (tEl.GetString())
+            {
+                case "peers":
+                    var msg = System.Text.Json.JsonSerializer.Deserialize<PeersMsg>(json);
+                    if (msg?.List != null) PeersReceived?.Invoke(msg.List);
+                    break;
+                // hello_ok, toasts, updates handled in later phases; unknown types ignored.
+            }
+        }
+        catch (Exception ex) { Debug.WriteLine($"[ServerLink.recv] {ex.Message}"); }
+    }
+
+    /// <summary>Send a metrics summary to the server (Phase 3).</summary>
+    public void ReportMetrics(List<MetricSample> samples)
+    {
+        if (samples.Count == 0) return;
+        _ = SendAsync(MetricsMsg.Create(samples));
     }
 
    private async Task SendAsync<T>(T msg)

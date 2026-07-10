@@ -1,14 +1,30 @@
 /**
- * Dashboard WebSocket client. Connects to /ws, authenticates via the session
- * cookie (sent automatically on the upgrade request), receives a full
- * presence snapshot then deltas. Reconnects with backoff — the same
- * resilience pattern the C# agent uses, in miniature.
+ * Dashboard WebSocket client — one socket, all live data (presence + the
+ * Phase 3 mesh matrix). Authenticates via the session cookie on the upgrade,
+ * receives a presence snapshot then deltas, plus periodic matrix + host
+ * recommendation. Reconnects with backoff — the same resilience pattern the
+ * C# agent uses, in miniature.
  */
 import { useEffect, useState } from "react";
-import type { PresenceUser } from "../../server/src/protocol/messages";
+import type {
+  PresenceUser,
+  MatrixCell,
+  HostRecommendation,
+} from "../../server/src/protocol/messages";
 
-export function usePresence(): Map<string, PresenceUser> {
-  const [byUser, setByUser] = useState<Map<string, PresenceUser>>(new Map());
+export type LiveData = {
+  presence: Map<string, PresenceUser>;
+  matrix: MatrixCell[];
+  recommendation: HostRecommendation;
+};
+
+export function useLiveData(): LiveData {
+  const [presence, setPresence] = useState<Map<string, PresenceUser>>(
+    new Map(),
+  );
+  const [matrix, setMatrix] = useState<MatrixCell[]>([]);
+  const [recommendation, setRecommendation] =
+    useState<HostRecommendation>(null);
 
   useEffect(() => {
     let sock: WebSocket | null = null;
@@ -27,22 +43,30 @@ export function usePresence(): Map<string, PresenceUser> {
       sock.onmessage = (ev) => {
         const msg = JSON.parse(String(ev.data)) as
           | { t: "presence"; users: PresenceUser[] }
-          | { t: "presence_delta"; user: PresenceUser };
+          | { t: "presence_delta"; user: PresenceUser }
+          | {
+              t: "matrix";
+              cells: MatrixCell[];
+              recommendation: HostRecommendation;
+            };
+
         if (msg.t === "presence") {
-          setByUser(new Map(msg.users.map((u) => [u.userId, u])));
+          setPresence(new Map(msg.users.map((u) => [u.userId, u])));
         } else if (msg.t === "presence_delta") {
-          setByUser((prev) => {
+          setPresence((prev) => {
             const next = new Map(prev);
             if (msg.user.state === "offline") next.delete(msg.user.userId);
             else next.set(msg.user.userId, msg.user);
             return next;
           });
+        } else if (msg.t === "matrix") {
+          setMatrix(msg.cells);
+          setRecommendation(msg.recommendation);
         }
       };
 
       sock.onclose = () => {
         if (closed) return;
-        // Exponential backoff with jitter — never hammer a restarting server.
         const delay =
           Math.min(1000 * 2 ** attempt++, 30_000) * (0.8 + Math.random() * 0.4);
         setTimeout(connect, delay);
@@ -56,5 +80,5 @@ export function usePresence(): Map<string, PresenceUser> {
     };
   }, []);
 
-  return byUser;
+  return { presence, matrix, recommendation };
 }

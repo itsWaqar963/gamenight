@@ -8,7 +8,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src && prettier --check src",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -29,6 +30,7 @@
     "prettier": "^3.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "typescript-eslint": "^8.8.0"
+    "typescript-eslint": "^8.8.0",
+    "vitest": "^2.1.0"
   }
 }

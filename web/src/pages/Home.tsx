@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, type Me } from "../api";
-import { usePresence } from "../presence";
+import { useLiveData } from "../presence";
+import { MeshMatrix } from "./Matrix";
 
 const STATE_META = {
   in_game: { dot: "#22c55e", label: "IN GAME 🎮" },
@@ -11,7 +12,7 @@ const STATE_META = {
 
 export function Home({ me }: { me: Me }) {
   const roster = useQuery({ queryKey: ["users"], queryFn: api.users });
-  const presence = usePresence();
+  const { presence, matrix, recommendation } = useLiveData();
 
   const members = (roster.data?.users ?? []).filter(
     (u) => u.status === "approved",
@@ -79,6 +80,14 @@ export function Home({ me }: { me: Me }) {
           </div>
         </div>
       ))}
+      <div style={{ marginTop: "1.5rem" }}>
+        <MeshMatrix
+          presence={presence}
+          matrix={matrix}
+          recommendation={recommendation}
+        />
+      </div>
+
       <h3 style={{ marginTop: "2rem" }}>Link your PC</h3>
       <LinkDevice />
     </>

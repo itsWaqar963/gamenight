@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>  <!-- SDD §31 -->
     <AssemblyName>GameNightAgent</AssemblyName>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <!-- single-file self-contained publish: one exe, no .NET install needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
