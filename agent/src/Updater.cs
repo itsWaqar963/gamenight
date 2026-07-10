@@ -101,11 +101,12 @@ public static class Updater
             await DownloadAsync(latest.Url, pending);
 
             string actual = ComputeSha256Hex(pending);
-            if (!actual.Equals(latest.Sha256.Trim(), StringComparison.OrdinalIgnoreCase))
+            string expected = NormalizeSha256(latest.Sha256);
+            if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
                 TryDelete(pending);
                 return new(UpdateOutcome.Failed,
-                    $"SHA-256 mismatch (got {actual[..Math.Min(12, actual.Length)]}…, expected {latest.Sha256[..Math.Min(12, latest.Sha256.Length)]}…). Update aborted.");
+                    $"SHA-256 mismatch (got {actual[..Math.Min(12, actual.Length)]}…, expected {expected[..Math.Min(12, expected.Length)]}…). Update aborted.");
             }
 
             string? target = Environment.ProcessPath;
@@ -148,11 +149,17 @@ public static class Updater
     /// <summary>Compare dotted semver-ish strings. Returns &gt;0 if a &gt; b.</summary>
     public static int CompareSemVer(string a, string b)
     {
-        static int[] Parts(string v) =>
-            v.TrimStart('v', 'V')
-             .Split('.', StringSplitOptions.RemoveEmptyEntries)
-             .Select(p => int.TryParse(new string(p.TakeWhile(char.IsDigit).ToArray()), out int n) ? n : 0)
-             .ToArray();
+        static int[] Parts(string raw)
+        {
+            string v = raw.Trim();
+            // Accept "0.6.1", "v0.6.1", or "agent-v0.6.1" (how some releases were tagged).
+            if (v.StartsWith("agent-", StringComparison.OrdinalIgnoreCase))
+                v = v[6..];
+            v = v.TrimStart('v', 'V');
+            return v.Split('.', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => int.TryParse(new string(p.TakeWhile(char.IsDigit).ToArray()), out int n) ? n : 0)
+                .ToArray();
+        }
 
         int[] pa = Parts(a), pb = Parts(b);
         int len = Math.Max(pa.Length, pb.Length);
@@ -163,6 +170,16 @@ public static class Updater
             if (x != y) return x.CompareTo(y);
         }
         return 0;
+    }
+
+    /// <summary>Accept bare hex or GitHub-style "sha256:abc…".</summary>
+    public static string NormalizeSha256(string sha)
+    {
+        string s = sha.Trim();
+        const string prefix = "sha256:";
+        if (s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            s = s[prefix.Length..].Trim();
+        return s.ToLowerInvariant();
     }
 
     private static async Task DownloadAsync(string url, string destPath)

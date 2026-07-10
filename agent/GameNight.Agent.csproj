@@ -7,11 +7,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>  <!-- SDD §31 -->
     <AssemblyName>GameNightAgent</AssemblyName>
-    <Version>0.6.0</Version>
+    <Version>0.6.1</Version>
     <!-- single-file self-contained publish: one exe, no .NET install needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <DefaultItemExcludes>$(DefaultItemExcludes);smoke\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
