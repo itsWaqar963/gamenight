@@ -11,6 +11,8 @@ export type Config = {
   google: { clientId: string; clientSecret: string } | undefined;
   /** First login with this email is auto-approved as admin (bootstrap problem: someone must approve the approver). */
   adminEmail: string | undefined;
+  /** Agent download metadata — SDD §22. Set via env; the exe lives on GitHub Releases. */
+  agent: { version: string | null; url: string | null; sha256: string | null };
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -28,5 +30,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
         : undefined,
     adminEmail: env.ADMIN_EMAIL?.toLowerCase(),
+    agent: {
+      version: env.AGENT_VERSION ?? null,
+      url: env.AGENT_DOWNLOAD_URL ?? null,
+      sha256: env.AGENT_SHA256 ?? null,
+    },
   };
 }

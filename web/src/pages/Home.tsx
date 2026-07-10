@@ -86,6 +86,19 @@ export function Home({ me }: { me: Me }) {
 }
 
 function LinkDevice() {
+  // Agent download metadata comes from the server (which reads it from env,
+  // pointing at a GitHub Release). If unconfigured, the download step hides
+  // itself gracefully rather than showing a dead button.
+  const release = useQuery({
+    queryKey: ["agent-latest"],
+    queryFn: () =>
+      fetch("/api/v1/agent/latest").then((r) => r.json()) as Promise<{
+        version: string | null;
+        url: string | null;
+        sha256: string | null;
+      }>,
+  });
+
   const link = useQuery({
     queryKey: ["linkcode"],
     queryFn: () =>
@@ -95,11 +108,42 @@ function LinkDevice() {
     enabled: false, // only on click
     gcTime: 0,
   });
+
+  const downloadUrl = release.data?.url ?? null;
+
   return (
     <div className="card">
       <p className="muted" style={{ marginTop: 0 }}>
-        Install the GameNight agent on your gaming PC, then generate a code and
-        type it into the agent.
+        Three steps: download the agent, run it, then paste a link code into it.
+      </p>
+
+      {/* Step 1 — download */}
+      <p>
+        <strong>1. Download the agent</strong>
+        <br />
+        {downloadUrl ? (
+          <>
+            <a className="btn" href={downloadUrl}>
+              Download GameNight agent
+              {release.data?.version ? ` (${release.data.version})` : ""}
+            </a>
+            <br />
+            <span className="muted" style={{ fontSize: ".85rem" }}>
+              Windows will warn about an unrecognized app — click{" "}
+              <em>More info → Run anyway</em>. It's safe; it's just unsigned.
+            </span>
+          </>
+        ) : (
+          <span className="muted">
+            Download link not configured yet — ask the admin for the agent file.
+          </span>
+        )}
+      </p>
+
+      {/* Step 2 — generate code */}
+      <p style={{ marginTop: "1.2rem" }}>
+        <strong>2. Generate a link code</strong> and type it into the agent
+        along with this site's address.
       </p>
       {link.data ? (
         <p>
