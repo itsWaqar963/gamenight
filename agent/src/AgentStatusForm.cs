@@ -35,6 +35,7 @@ public sealed class AgentStatusForm : Form
         _serverUrl = serverUrl;
 
         Text = "GameNight Agent";
+        Icon = AppIcon.ForWindow;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = true;
@@ -47,23 +48,31 @@ public sealed class AgentStatusForm : Form
         var header = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 64,
+            Height = 72,
             BackColor = Color.FromArgb(28, 32, 38),
         };
+        var brand = new PictureBox
+        {
+            Image = AppIcon.ForWindow.ToBitmap(),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Size = new Size(40, 40),
+            Location = new Point(16, 16),
+        };
+        header.Controls.Add(brand);
         header.Controls.Add(new Label
         {
             Text = "GameNight",
             ForeColor = Color.White,
             Font = new Font("Segoe UI Semibold", 14f),
             AutoSize = true,
-            Location = new Point(16, 10),
+            Location = new Point(66, 14),
         });
         header.Controls.Add(new Label
         {
             Text = "Agent status",
             ForeColor = Color.FromArgb(180, 188, 198),
             AutoSize = true,
-            Location = new Point(18, 36),
+            Location = new Point(68, 40),
         });
 
         ContentHost = new Panel

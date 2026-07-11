@@ -7,14 +7,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>  <!-- SDD §31 -->
     <AssemblyName>GameNightAgent</AssemblyName>
-    <Version>0.7.2</Version>
+    <Version>0.7.3</Version>
     <!-- single-file self-contained publish: one exe, no .NET install needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationIcon>..\ico\icon.ico</ApplicationIcon>
     <DefaultItemExcludes>$(DefaultItemExcludes);smoke\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <EmbeddedResource Include="..\ico\icon.ico" LogicalName="gamenight.icon.ico" />
   </ItemGroup>
 </Project>

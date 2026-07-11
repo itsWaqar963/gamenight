@@ -43,7 +43,7 @@ public sealed class TrayIcon : IDisposable
 
         _icon = new NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = AppIcon.ForTray,
             Text = TipText(),
             Visible = true,
             ContextMenuStrip = menu,

@@ -17,6 +17,7 @@ public sealed class LinkForm : Form
     public LinkForm(string defaultUrl)
     {
         Text = "GameNight — link this PC";
+        Icon = AppIcon.ForWindow;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
         ClientSize = new Size(360, 220);
