@@ -173,9 +173,9 @@ public static class Updater
                 return new(UpdateOutcome.Failed, "Cannot locate running executable path.");
 
             Progress($"Installing v{verLabel}…");
-            // The pending file can't replace itself while running, so copy it to
-            // a swap helper. Program.Main handles --apply-update before the mutex.
-            string swap = Path.Combine(UpdateDir, "GameNightAgent.swap.exe");
+            // Unique swap name so a leftover locked GameNightAgent.swap.exe from a
+            // previous attempt cannot block File.Copy.
+            string swap = Path.Combine(UpdateDir, $"GameNightAgent.swap-{Guid.NewGuid():N}.exe");
             File.Copy(pending, swap, overwrite: true);
 
             int pid = Environment.ProcessId;
@@ -258,43 +258,49 @@ public static class Updater
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             string tmp = destPath + $".partial-{Environment.ProcessId}-{Guid.NewGuid():N}";
-            TryDelete(destPath);
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
                 resp.EnsureSuccessStatusCode();
                 long? total = resp.Content.Headers.ContentLength;
-                await using var input = await resp.Content.ReadAsStreamAsync();
-                await using var output = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                var buffer = new byte[81920];
-                long copied = 0;
-                int lastPct = -1;
-                int read;
-                while ((read = await input.ReadAsync(buffer)) > 0)
+
+                // Dispose streams BEFORE rename — Windows will not Move a file that
+                // still has an open write handle (caused the download-loop bug).
                 {
-                    await output.WriteAsync(buffer.AsMemory(0, read));
-                    copied += read;
-                    if (total is > 0)
+                    await using var input = await resp.Content.ReadAsStreamAsync();
+                    await using var output = new FileStream(
+                        tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                    var buffer = new byte[81920];
+                    long copied = 0;
+                    int lastPct = -1;
+                    int read;
+                    while ((read = await input.ReadAsync(buffer)) > 0)
                     {
-                        int pct = (int)(copied * 100 / total.Value);
-                        if (pct != lastPct && (pct == 100 || pct - lastPct >= 5))
+                        await output.WriteAsync(buffer.AsMemory(0, read));
+                        copied += read;
+                        if (total is > 0)
                         {
-                            lastPct = pct;
-                            try { onPercent?.Invoke(pct); } catch { }
+                            int pct = (int)(copied * 100 / total.Value);
+                            if (pct != lastPct && (pct == 100 || pct - lastPct >= 5))
+                            {
+                                lastPct = pct;
+                                try { onPercent?.Invoke(pct); } catch { }
+                            }
+                        }
+                        else if (lastPct < 0)
+                        {
+                            lastPct = 0;
+                            try { onPercent?.Invoke(null); } catch { }
                         }
                     }
-                    else if (lastPct < 0)
-                    {
-                        lastPct = 0;
-                        try { onPercent?.Invoke(null); } catch { }
-                    }
+                    await output.FlushAsync();
                 }
 
-                File.Move(tmp, destPath, overwrite: true);
+                await ReplaceFileWithRetryAsync(tmp, destPath);
                 return;
             }
-            catch (Exception ex) when (attempt < maxAttempts && IsTransient(ex))
+            catch (Exception ex) when (attempt < maxAttempts && IsTransientNetwork(ex))
             {
                 last = ex;
                 Log($"download attempt {attempt}/{maxAttempts} failed (will retry): {FormatException(ex)}");
@@ -310,11 +316,36 @@ public static class Updater
         throw last ?? new InvalidOperationException("download failed");
     }
 
-    private static bool IsTransient(Exception ex)
+    /// <summary>Move/replace with short retries for AV scanners; does not re-download.</summary>
+    private static async Task ReplaceFileWithRetryAsync(string source, string dest)
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            try
+            {
+                TryDelete(dest);
+                File.Move(source, dest);
+                return;
+            }
+            catch (IOException) when (i < 9)
+            {
+                await Task.Delay(200 * (i + 1));
+            }
+            catch (UnauthorizedAccessException) when (i < 9)
+            {
+                await Task.Delay(200 * (i + 1));
+            }
+        }
+        // Last resort: copy then delete source.
+        File.Copy(source, dest, overwrite: true);
+        TryDelete(source);
+    }
+
+    private static bool IsTransientNetwork(Exception ex)
     {
         for (Exception? e = ex; e != null; e = e.InnerException)
         {
-            if (e is HttpRequestException or IOException or System.Net.Sockets.SocketException)
+            if (e is HttpRequestException or System.Net.Sockets.SocketException)
                 return true;
             if (e.Message.Contains("SSL", StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains("TLS", StringComparison.OrdinalIgnoreCase))
