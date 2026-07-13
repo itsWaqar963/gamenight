@@ -1,0 +1,132 @@
+# Build GameNightAgent.exe and publish a GitHub Release for tag agent-vX.Y.Z.
+# After the release, paste the AGENT_* block from the release notes into Render.
+name: release-agent
+
+on:
+  push:
+    tags:
+      - 'agent-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Agent version to release (e.g. 0.7.7) — must match csproj and Dto.cs'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $raw = '${{ inputs.version }}'.Trim()
+          } else {
+            $raw = '${{ github.ref_name }}'
+          }
+          $raw = $raw.TrimStart()
+          if ($raw -match '^agent-v') { $raw = $raw.Substring(7) }
+          elseif ($raw.StartsWith('v') -or $raw.StartsWith('V')) { $raw = $raw.Substring(1) }
+          if ($raw -notmatch '^\d+\.\d+\.\d+') {
+            throw "Invalid version '$raw'. Expected X.Y.Z (optionally agent-v / v prefix)."
+          }
+          $tag = "agent-v$raw"
+          "version=$raw" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Releasing $tag"
+
+      - name: Assert in-repo version matches
+        shell: pwsh
+        run: |
+          $expected = '${{ steps.ver.outputs.version }}'
+          $csproj = Get-Content 'agent/GameNight.Agent.csproj' -Raw
+          if ($csproj -notmatch '<Version>([^<]+)</Version>') {
+            throw 'Could not find <Version> in agent/GameNight.Agent.csproj'
+          }
+          $csprojVer = $Matches[1].Trim()
+          $dto = Get-Content 'agent/src/Dto.cs' -Raw
+          if ($dto -notmatch 'public const string Version = "([^"]+)"') {
+            throw 'Could not find AgentInfo.Version in agent/src/Dto.cs'
+          }
+          $dtoVer = $Matches[1].Trim()
+          if ($csprojVer -ne $expected -or $dtoVer -ne $expected) {
+            throw "Version mismatch: release=$expected csproj=$csprojVer Dto.cs=$dtoVer. Bump both files before tagging."
+          }
+          Write-Host "Version check OK: $expected"
+
+      - name: Refuse if release already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.ver.outputs.tag }}'
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists. Refusing to overwrite (e.g. agent-v0.7.6)."
+          }
+          Write-Host "No existing release for $tag — continuing."
+          exit 0
+
+      - name: Publish agent
+        shell: pwsh
+        run: |
+          dotnet publish agent/GameNight.Agent.csproj -c Release --nologo
+          $exe = 'agent/bin/Release/net8.0-windows/win-x64/publish/GameNightAgent.exe'
+          if (-not (Test-Path $exe)) { throw "Publish output missing: $exe" }
+
+      - name: SHA-256 and release notes
+        id: artifact
+        shell: pwsh
+        run: |
+          $version = '${{ steps.ver.outputs.version }}'
+          $tag = '${{ steps.ver.outputs.tag }}'
+          $exe = 'agent/bin/Release/net8.0-windows/win-x64/publish/GameNightAgent.exe'
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $repo = $env:GITHUB_REPOSITORY
+          $url = "https://github.com/$repo/releases/download/$tag/GameNightAgent.exe"
+          $fence = '```'
+          $notes = @(
+            "Agent v$version — automated build.",
+            '',
+            '### Render env (paste into Environment, then Save)',
+            $fence,
+            "AGENT_VERSION=$version",
+            "AGENT_DOWNLOAD_URL=$url",
+            "AGENT_SHA256=$sha",
+            $fence,
+            '',
+            'Existing agents poll `/api/v1/agent/latest` (or tray → **Check for updates**) and self-swap after verifying the hash. See ADR-0009.'
+          ) -join "`n"
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          Set-Content -Path $notesPath -Value $notes -Encoding utf8NoBOM
+          "sha=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "notes=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "exe=$exe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "SHA-256: $sha"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.ver.outputs.tag }}'
+          $version = '${{ steps.ver.outputs.version }}'
+          $exe = '${{ steps.artifact.outputs.exe }}'
+          $notes = '${{ steps.artifact.outputs.notes }}'
+          gh release create $tag $exe `
+            --title "Agent v$version" `
+            --notes-file $notes `
+            --target ${{ github.sha }}
