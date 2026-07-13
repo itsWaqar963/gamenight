@@ -5,14 +5,16 @@
 Preferred path (CI):
 
 1. Bump `<Version>` in `agent/GameNight.Agent.csproj` **and** `AgentInfo.Version` in `agent/src/Dto.cs` (keep them identical).
-2. Merge to `main`, then either:
+2. Merge to `main`. The **release-agent** workflow runs on that push and creates GitHub Release `agent-vX.Y.Z` with `GameNightAgent.exe` **if that tag does not already exist**.
+3. You can also force a release without waiting for a merge:
    - push tag `agent-vX.Y.Z`, or
-   - Actions → **release-agent** → Run workflow → enter `X.Y.Z`
-3. Wait for the workflow to create the GitHub Release and attach `GameNightAgent.exe`.
+   - Actions → **release-agent** → Run workflow → enter `X.Y.Z` (repo admins)
 4. Open the release notes and copy the three `AGENT_*` lines into Render → Environment → Save (redeploy).
 5. Existing agents poll `/api/v1/agent/latest` within ~6 hours (or tray → **Check for updates**) and self-swap after verifying the hash. See ADR-0009.
 
-The workflow refuses to overwrite an existing tag/release (e.g. already-published `agent-v0.7.6`).
+Notes:
+- Merging the workflow alone does **not** create a release unless `main` still has an unpublished agent version (then a later `main` push / this auto path will publish it).
+- Tag / manual dispatch **refuse** to overwrite an existing release. A plain `main` push **skips** quietly if the release already exists.
 
 ### Local / offline fallback
 
