@@ -1,9 +1,11 @@
 # Build GameNightAgent.exe and publish a GitHub Release for tag agent-vX.Y.Z.
+# Triggers: agent-v* tag, manual dispatch, or push to main when that version has no release yet.
 # After the release, paste the AGENT_* block from the release notes into Render.
 name: release-agent
 
 on:
   push:
+    branches: [main]
     tags:
       - 'agent-v*'
   workflow_dispatch:
@@ -32,21 +34,31 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+          $event = '${{ github.event_name }}'
+          $refType = '${{ github.ref_type }}'
+          if ($event -eq 'workflow_dispatch') {
             $raw = '${{ inputs.version }}'.Trim()
-          } else {
+          } elseif ($refType -eq 'tag') {
             $raw = '${{ github.ref_name }}'
+          } else {
+            # push to main — version comes from the repo itself
+            $csproj = Get-Content 'agent/GameNight.Agent.csproj' -Raw
+            if ($csproj -notmatch '<Version>([^<]+)</Version>') {
+              throw 'Could not find <Version> in agent/GameNight.Agent.csproj'
+            }
+            $raw = $Matches[1].Trim()
           }
-          $raw = $raw.TrimStart()
           if ($raw -match '^agent-v') { $raw = $raw.Substring(7) }
           elseif ($raw.StartsWith('v') -or $raw.StartsWith('V')) { $raw = $raw.Substring(1) }
           if ($raw -notmatch '^\d+\.\d+\.\d+') {
             throw "Invalid version '$raw'. Expected X.Y.Z (optionally agent-v / v prefix)."
           }
           $tag = "agent-v$raw"
+          $explicit = ($event -eq 'workflow_dispatch') -or ($refType -eq 'tag')
           "version=$raw" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Releasing $tag"
+          "explicit=$explicit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Releasing $tag (event=$event ref_type=$refType explicit=$explicit)"
 
       - name: Assert in-repo version matches
         shell: pwsh
@@ -67,20 +79,28 @@ jobs:
           }
           Write-Host "Version check OK: $expected"
 
-      - name: Refuse if release already exists
+      - name: Skip or refuse if release already exists
+        id: existing
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           $tag = '${{ steps.ver.outputs.tag }}'
+          $explicit = '${{ steps.ver.outputs.explicit }}' -eq 'True'
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
-            throw "Release $tag already exists. Refusing to overwrite (e.g. agent-v0.7.6)."
+            if (-not $explicit) {
+              Write-Host "Release $tag already exists — nothing to do on main push."
+              "skip=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              exit 0
+            }
+            throw "Release $tag already exists. Refusing to overwrite."
           }
+          "skip=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "No existing release for $tag — continuing."
           exit 0
-
       - name: Publish agent
+        if: steps.existing.outputs.skip != 'true'
         shell: pwsh
         run: |
           dotnet publish agent/GameNight.Agent.csproj -c Release --nologo
@@ -88,6 +108,7 @@ jobs:
           if (-not (Test-Path $exe)) { throw "Publish output missing: $exe" }
 
       - name: SHA-256 and release notes
+        if: steps.existing.outputs.skip != 'true'
         id: artifact
         shell: pwsh
         run: |
@@ -118,6 +139,7 @@ jobs:
           Write-Host "SHA-256: $sha"
 
       - name: Create GitHub Release
+        if: steps.existing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
