@@ -14,6 +14,7 @@ export type Config = {
   /** Agent download metadata — SDD §22. Set via env; the exe lives on GitHub Releases. */
   agent: { version: string | null; url: string | null; sha256: string | null };
   setup: { gameUrl: string | null; radminNetwork: string | null };
+  github: { owner: string; repo: string };
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -39,6 +40,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     setup: {
       gameUrl: env.GAME_DOWNLOAD_URL ?? null,
       radminNetwork: env.RADMIN_NETWORK ?? null,
+    },
+    // Source repo for fetching latest agent release from the GitHub API.
+    // Defaults to the canonical repo; override via env if the repo moves/forks.
+    github: {
+      owner: env.GITHUB_OWNER ?? 'itsWaqar963',
+      repo: env.GITHUB_REPO ?? 'gamenight',
     },
   };
 }
