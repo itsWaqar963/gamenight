@@ -43,7 +43,7 @@ internal static class Program
         using var link = new ServerLink(config.ServerUrl, token);
         using var probes = new ProbeEngine();
         using var tray = new TrayIcon(config.ServerUrl, link);
-        using var status = new AgentStatusForm(config.ServerUrl);
+        using var status = new AgentStatusForm(config.ServerUrl, config);
 
         // Phase 3: server sends who to probe → feed the probe engine.
         // Also keep the latest list for diagnostics (peer reachability).
@@ -77,7 +77,15 @@ internal static class Program
         tray.PauseToggled += SetPaused;
         status.PauseToggled += SetPaused;
         tray.OpenStatusRequested += status.ShowOrFocus;
+        tray.OpenVoiceRequested += status.ShowVoiceTab;
         link.StatusChanged += s => status.SetConnectionStatus(s);
+
+        using var pttHotkey = new Voice.PttHotkey();
+        status.VoiceTab.PttHotkey = pttHotkey;
+        pttHotkey.PttChanged += down =>
+        {
+            _ = status.VoiceTab.TryHandlePttHotkeyAsync(down);
+        };
 
         link.Start();
         probes.Start();

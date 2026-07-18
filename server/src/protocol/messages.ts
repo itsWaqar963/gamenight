@@ -22,7 +22,7 @@ export type DashboardHello = { t: 'hello'; role: 'dashboard' };
 export type DashboardToServer = DashboardHello | RunDiagnosticsMsg;
 
 // ---- server → agent ----
-export type HelloOk = { t: 'hello_ok'; deviceId: string };
+export type HelloOk = { t: 'hello_ok'; deviceId: string; userId: string; role: 'admin' | 'member' };
 export type ToastMsg = { t: 'toast'; title: string; body: string };
 export type ServerError = { t: 'error'; message: string };
 

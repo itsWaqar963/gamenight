@@ -13,6 +13,14 @@ public sealed class AgentConfig
     public string ServerUrl { get; set; } = "https://gamenight-xbgu.onrender.com"; // overwritten at link time
     public string? TokenProtected { get; set; } // base64(DPAPI(token))
 
+    // Voice tab (gamenight/voice-server — ADR-0012)
+    public string? VoiceServerUrl { get; set; }
+    public string? VoiceDisplayName { get; set; }
+    public string? VoiceLastRoom { get; set; }
+    public bool VoicePushToTalk { get; set; }
+    /// <summary>1–100; higher = more sensitive mic speaking detection.</summary>
+    public int VoiceMicSensitivity { get; set; } = 55;
+
     /// <summary>%LOCALAPPDATA%\GameNight — config, logs, pending updates.</summary>
     public static readonly string DataDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameNight");

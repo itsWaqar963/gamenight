@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>                <!-- WinExe = no console window -->
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>        <!-- NotifyIcon (tray) lives here -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>  <!-- SDD §31 -->
     <AssemblyName>GameNightAgent</AssemblyName>
-    <Version>0.7.6</Version>
+    <Version>0.8.6</Version>
     <!-- single-file self-contained publish: one exe, no .NET install needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -16,6 +16,9 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);smoke\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="SIPSorcery" Version="6.0.12" />
+    <PackageReference Include="SIPSorceryMedia.Windows" Version="6.0.4" />
+    <PackageReference Include="SocketIOClient" Version="3.1.2" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <EmbeddedResource Include="..\ico\icon.ico" LogicalName="gamenight.icon.ico" />
   </ItemGroup>
