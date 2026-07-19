@@ -13,6 +13,7 @@ public sealed class TrayIcon : IDisposable
     public event Action<bool>? PauseToggled;
     public event Action? UpdateCheckRequested;
     public event Action? OpenStatusRequested;
+    public event Action? OpenVoiceRequested;
 
     public TrayIcon(string serverUrl, ServerLink link)
     {
@@ -26,6 +27,7 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(version);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open status", null, (_, _) => OpenStatusRequested?.Invoke());
+        menu.Items.Add("Open Voice", null, (_, _) => OpenVoiceRequested?.Invoke());
         menu.Items.Add("Open dashboard", null, (_, _) =>
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(serverUrl) { UseShellExecute = true }));
         menu.Items.Add(checkUpdate);

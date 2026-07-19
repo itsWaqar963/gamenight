@@ -13,6 +13,22 @@ public sealed class AgentConfig
     public string ServerUrl { get; set; } = "https://gamenight-xbgu.onrender.com"; // overwritten at link time
     public string? TokenProtected { get; set; } // base64(DPAPI(token))
 
+    // Voice tab (gamenight/voice-server — ADR-0012)
+    public string? VoiceServerUrl { get; set; }
+    /// <summary>voip | radmin | custom — selected from Voice server dropdown.</summary>
+    public string VoiceServerMode { get; set; } = "voip";
+    public string? VoiceDisplayName { get; set; }
+    public string? VoiceLastRoom { get; set; }
+    public bool VoicePushToTalk { get; set; }
+    /// <summary>WASAPI shared mode so Discord / other apps can use the mic too.</summary>
+    public bool VoiceShareMic { get; set; } = true;
+    /// <summary>1–100; higher = more sensitive mic speaking detection.</summary>
+    public int VoiceMicSensitivity { get; set; } = 55;
+    /// <summary>Global PTT virtual-key code (default 0x32 = digit '2').</summary>
+    public int VoicePttKeyVk { get; set; } = 0x32;
+    /// <summary>Optional display label for the bound PTT key (UI).</summary>
+    public string? VoicePttKeyName { get; set; }
+
     /// <summary>%LOCALAPPDATA%\GameNight — config, logs, pending updates.</summary>
     public static readonly string DataDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameNight");

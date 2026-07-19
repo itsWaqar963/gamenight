@@ -15,3 +15,5 @@ Private LAN/VPN gaming monitor & community platform for Far Cry 2 over Radmin VP
 | `shared/` | Protocol types shared across components |
 | `infra/` | Dockerfile, compose, Render blueprint |
 | `docs/` | SDD, ADRs, runbook, CCNA lab writeups |
+
+Agent Voice signaling uses the hosted Railway Socket.IO server (not shipped in this repo).

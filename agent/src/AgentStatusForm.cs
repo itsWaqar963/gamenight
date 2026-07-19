@@ -1,6 +1,5 @@
-// Simple agent status window. Tray stays primary; this is visual feedback for
-// connection, monitoring, and updates. ContentHost is Dock=Fill so a future
-// WebView2 can embed the web dashboard without rewriting the outer shell.
+// Agent window with Status | Voice tabs (ADR-0012). Tray stays primary;
+// closing hides to tray. Voice tab uses voice-server signaling + native WebRTC.
 namespace GameNight.Agent;
 
 public sealed class AgentStatusForm : Form
@@ -26,6 +25,7 @@ public sealed class AgentStatusForm : Form
     private readonly Button _dashboardBtn = ActionButton("Open dashboard");
 
     private readonly string _serverUrl;
+    private readonly Voice.VoiceTabPanel _voiceTab;
     private bool _paused;
     private string _connection = "starting…";
     private string _radmin = "—";
@@ -33,12 +33,12 @@ public sealed class AgentStatusForm : Form
     public event Action<bool>? PauseToggled;
     public event Action? UpdateCheckRequested;
 
-    // Reserved for a future WebView2 dashboard host.
-    public Panel ContentHost { get; }
+    public Voice.VoiceTabPanel VoiceTab => _voiceTab;
 
-    public AgentStatusForm(string serverUrl)
+    public AgentStatusForm(string serverUrl, AgentConfig config)
     {
         _serverUrl = serverUrl;
+        _voiceTab = new Voice.VoiceTabPanel(config);
 
         Text = "GameNight Agent";
         Icon = AppIcon.ForWindow;
@@ -46,11 +46,12 @@ public sealed class AgentStatusForm : Form
         MaximizeBox = false;
         MinimizeBox = true;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(440, 440);
+        ClientSize = new Size(460, 560);
         BackColor = Bg;
         ForeColor = TextPrimary;
         Font = new Font("Segoe UI", 9f);
         ShowInTaskbar = true;
+        KeyPreview = true;
 
         var header = new Panel
         {
@@ -78,20 +79,87 @@ public sealed class AgentStatusForm : Form
         });
         header.Controls.Add(new Label
         {
-            Text = "Agent status",
+            Text = "Agent",
             ForeColor = TextMuted,
             AutoSize = true,
             Location = new Point(68, 40),
             BackColor = Color.Transparent,
         });
 
-        ContentHost = new Panel
+        var tabs = new TabControl
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(16),
+            Padding = new Point(12, 6),
+        };
+        // Dark-ish tabs via owner-draw would be overkill; system tabs are fine.
+
+        var statusPage = new TabPage("Status")
+        {
             BackColor = Bg,
+            Padding = new Padding(12),
+        };
+        statusPage.Controls.Add(BuildStatusBody());
+
+        var voicePage = new TabPage("Voice")
+        {
+            BackColor = Bg,
+            Padding = new Padding(0),
+        };
+        voicePage.Controls.Add(_voiceTab);
+
+        tabs.TabPages.Add(statusPage);
+        tabs.TabPages.Add(voicePage);
+
+        Controls.Add(tabs);
+        Controls.Add(header);
+
+        _pauseBtn.Click += (_, _) =>
+        {
+            _paused = !_paused;
+            RefreshMonitoringLabel();
+            PauseToggled?.Invoke(_paused);
+        };
+        _updateBtn.Click += (_, _) =>
+        {
+            SetUpdateStatus("Checking…");
+            UpdateCheckRequested?.Invoke();
+        };
+        _dashboardBtn.Click += (_, _) =>
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_serverUrl) { UseShellExecute = true });
+
+        FormClosing += (_, e) =>
+        {
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                Hide();
+            }
         };
 
+        KeyDown += async (_, e) =>
+        {
+            if (IsTypingTarget(ActiveControl)) return;
+            var hotkey = _voiceTab.PttHotkey;
+            if (hotkey is null || !hotkey.MatchesKeys(e.KeyCode)) return;
+            e.SuppressKeyPress = true;
+            await _voiceTab.TryHandlePttHotkeyAsync(true);
+        };
+        KeyUp += async (_, e) =>
+        {
+            var hotkey = _voiceTab.PttHotkey;
+            if (hotkey is null || !hotkey.MatchesKeys(e.KeyCode)) return;
+            await _voiceTab.TryHandlePttHotkeyAsync(false);
+        };
+
+        RefreshMonitoringLabel();
+        ApplyStatusColors();
+    }
+
+    private static bool IsTypingTarget(Control? c) =>
+        c is TextBox or ComboBox or RichTextBox;
+
+    private Control BuildStatusBody()
+    {
         var body = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -148,42 +216,13 @@ public sealed class AgentStatusForm : Form
             ForeColor = TextMuted,
             BackColor = Color.Transparent,
             Padding = new Padding(0, 16, 0, 0),
-            Text = "Closing this window keeps the agent running in the tray.",
+            Text = "Closing this window keeps the agent running in the tray. Use the Voice tab for squad chat.",
         };
 
         body.Controls.Add(card);
         body.Controls.Add(actions);
         body.Controls.Add(hint);
-        ContentHost.Controls.Add(body);
-
-        Controls.Add(ContentHost);
-        Controls.Add(header);
-
-        _pauseBtn.Click += (_, _) =>
-        {
-            _paused = !_paused;
-            RefreshMonitoringLabel();
-            PauseToggled?.Invoke(_paused);
-        };
-        _updateBtn.Click += (_, _) =>
-        {
-            SetUpdateStatus("Checking…");
-            UpdateCheckRequested?.Invoke();
-        };
-        _dashboardBtn.Click += (_, _) =>
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_serverUrl) { UseShellExecute = true });
-
-        FormClosing += (_, e) =>
-        {
-            if (e.CloseReason == CloseReason.UserClosing)
-            {
-                e.Cancel = true;
-                Hide();
-            }
-        };
-
-        RefreshMonitoringLabel();
-        ApplyStatusColors();
+        return body;
     }
 
     public void ShowOrFocus()
@@ -193,6 +232,13 @@ public sealed class AgentStatusForm : Form
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         Activate();
         BringToFront();
+    }
+
+    public void ShowVoiceTab()
+    {
+        ShowOrFocus();
+        if (Controls.OfType<TabControl>().FirstOrDefault() is { } tabs && tabs.TabPages.Count > 1)
+            tabs.SelectedIndex = 1;
     }
 
     public void SetConnectionStatus(string status)

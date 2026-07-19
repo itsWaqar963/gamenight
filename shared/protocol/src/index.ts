@@ -17,7 +17,7 @@ export type AgentHeartbeat = { t: 'hb' };
 export type AgentToServer = AgentHello | AgentStateMsg | AgentHeartbeat;
 
 // ---- server → agent ----
-export type ServerHelloOk = { t: 'hello_ok'; deviceId: string; userId: string };
+export type ServerHelloOk = { t: 'hello_ok'; deviceId: string; userId: string; role: 'admin' | 'member' };
 export type ServerError = { t: 'error'; code: 'bad_token' | 'revoked' | 'not_approved' | 'bad_hello'; message: string };
 export type ServerToAgent = ServerHelloOk | ServerError;
 

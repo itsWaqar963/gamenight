@@ -104,8 +104,11 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish agent/GameNight.Agent.csproj -c Release --nologo
-          $exe = 'agent/bin/Release/net8.0-windows/win-x64/publish/GameNightAgent.exe'
-          if (-not (Test-Path $exe)) { throw "Publish output missing: $exe" }
+          $exe = Get-ChildItem -Path 'agent/bin/Release' -Recurse -Filter 'GameNightAgent.exe' |
+            Where-Object { $_.FullName -match '[\\/]publish[\\/]' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw "Publish output missing under agent/bin/Release/**/publish/GameNightAgent.exe" }
+          Write-Host "Published: $exe"
 
       - name: SHA-256 and release notes
         if: steps.existing.outputs.skip != 'true'
@@ -114,7 +117,10 @@ jobs:
         run: |
           $version = '${{ steps.ver.outputs.version }}'
           $tag = '${{ steps.ver.outputs.tag }}'
-          $exe = 'agent/bin/Release/net8.0-windows/win-x64/publish/GameNightAgent.exe'
+          $exe = Get-ChildItem -Path 'agent/bin/Release' -Recurse -Filter 'GameNightAgent.exe' |
+            Where-Object { $_.FullName -match '[\\/]publish[\\/]' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw "Publish output missing under agent/bin/Release/**/publish/GameNightAgent.exe" }
           $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           $repo = $env:GITHUB_REPOSITORY
           $url = "https://github.com/$repo/releases/download/$tag/GameNightAgent.exe"

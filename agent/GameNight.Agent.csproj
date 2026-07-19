@@ -1,21 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>                <!-- WinExe = no console window -->
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>        <!-- NotifyIcon (tray) lives here -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>  <!-- SDD §31 -->
     <AssemblyName>GameNightAgent</AssemblyName>
-    <Version>0.7.6</Version>
+    <Version>0.8.0</Version>
     <!-- single-file self-contained publish: one exe, no .NET install needed -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- Extract SpeexDSP native DLL next to the single-file host at runtime -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <ApplicationIcon>..\ico\icon.ico</ApplicationIcon>
     <DefaultItemExcludes>$(DefaultItemExcludes);smoke\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="SIPSorcery" Version="10.0.12" />
+    <PackageReference Include="SocketIOClient" Version="3.1.2" />
+    <PackageReference Include="SpeexDSPSharp" Version="1.3.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <EmbeddedResource Include="..\ico\icon.ico" LogicalName="gamenight.icon.ico" />
   </ItemGroup>
