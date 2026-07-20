@@ -1,10 +1,12 @@
-// Agent self-update (Phase 5): poll GET /api/v1/agent/latest, download the
-// GitHub Release asset, verify SHA-256, then two-process binary-swap.
+// Agent self-update (Phase 5): poll GitHub Releases on itsWaqar963/gamenight
+// (primary), fall back to GET /api/v1/agent/latest on the linked GameNight
+// server, download the asset, verify SHA-256, then two-process binary-swap.
 // Windows locks the running exe, so a child (--apply-update) waits for our
 // PID, replaces the file, and relaunches.
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace GameNight.Agent;
@@ -18,7 +20,7 @@ public enum UpdateOutcome
 {
     UpToDate,
     Updated,       // swap scheduled; caller must exit
-    NotConfigured, // server returned null metadata
+    NotConfigured, // no usable release metadata
     Failed,
 }
 
@@ -28,12 +30,21 @@ public static class Updater
 {
     public const string ApplyUpdateFlag = "--apply-update";
 
+    /// <summary>Canonical upstream repo for agent builds (Waqar).</summary>
+    public const string GitHubOwner = "itsWaqar963";
+    public const string GitHubRepo = "gamenight";
+
     private static readonly string UpdateDir =
         Path.Combine(AgentConfig.DataDir, "update");
 
     private static readonly HttpClient Http = CreateHttp();
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static int _swapScheduled; // 1 after swap is scheduled; hold gate until exit
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
 
     private static HttpClient CreateHttp()
     {
@@ -45,6 +56,7 @@ public static class Updater
         };
         var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd($"GameNightAgent/{AgentInfo.Version}");
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         return http;
     }
 
@@ -107,7 +119,7 @@ public static class Updater
 
         try
         {
-            Progress("Checking…");
+            Progress("Checking GitHub…");
             LatestRelease? latest = await FetchLatestAsync(serverUrl);
             if (latest is null ||
                 string.IsNullOrWhiteSpace(latest.Version) ||
@@ -115,7 +127,7 @@ public static class Updater
                 string.IsNullOrWhiteSpace(latest.Sha256))
             {
                 return new(UpdateOutcome.NotConfigured,
-                    "Update metadata not configured on the server yet.");
+                    "Could not read the latest agent release from GitHub yet.");
             }
 
             if (CompareSemVer(latest.Version, AgentInfo.Version) <= 0)
@@ -178,14 +190,122 @@ public static class Updater
         return v.TrimStart('v', 'V');
     }
 
-    public static async Task<LatestRelease?> FetchLatestAsync(string serverUrl)
+    /// <summary>
+    /// Prefer GitHub Releases on itsWaqar963/gamenight; fall back to the linked server.
+    /// </summary>
+    public static async Task<LatestRelease?> FetchLatestAsync(string? serverUrl)
+    {
+        try
+        {
+            LatestRelease? fromGh = await FetchLatestFromGitHubAsync();
+            if (fromGh is not null &&
+                !string.IsNullOrWhiteSpace(fromGh.Version) &&
+                !string.IsNullOrWhiteSpace(fromGh.Url))
+            {
+                return fromGh;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"github latest failed: {FormatException(ex)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(serverUrl))
+        {
+            try
+            {
+                return await FetchLatestFromServerAsync(serverUrl);
+            }
+            catch (Exception ex)
+            {
+                Log($"server latest failed: {FormatException(ex)}");
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<LatestRelease?> FetchLatestFromGitHubAsync()
+    {
+        string url =
+            $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases?per_page=30";
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        using var resp = await Http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+
+        await using var stream = await resp.Content.ReadAsStreamAsync();
+        var releases = await JsonSerializer.DeserializeAsync<List<GhRelease>>(stream, JsonOpts);
+        if (releases is null || releases.Count == 0) return null;
+
+        return PickBestAgentRelease(releases);
+    }
+
+    private static async Task<LatestRelease?> FetchLatestFromServerAsync(string serverUrl)
     {
         var baseUri = serverUrl.TrimEnd('/') + "/";
         using var req = new HttpRequestMessage(HttpMethod.Get,
             new Uri(new Uri(baseUri), "api/v1/agent/latest"));
         using var resp = await Http.SendAsync(req);
         resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadFromJsonAsync<LatestRelease>();
+        return await resp.Content.ReadFromJsonAsync<LatestRelease>(JsonOpts);
+    }
+
+    internal static LatestRelease? PickBestAgentRelease(IReadOnlyList<GhRelease> releases)
+    {
+        var withExe = new List<(string Tag, string Version, string Url, string? Sha, bool IsAgentTag)>();
+        foreach (GhRelease r in releases)
+        {
+            if (r.Draft || r.Prerelease || string.IsNullOrWhiteSpace(r.TagName) || r.Assets is null)
+                continue;
+            GhAsset? exe = PickExeAsset(r.Assets);
+            if (exe is null || string.IsNullOrWhiteSpace(exe.BrowserDownloadUrl))
+                continue;
+
+            string version = FormatVersionLabel(r.TagName);
+            string? sha = ExtractSha(exe, r.Body);
+            bool isAgent = r.TagName.StartsWith("agent-v", StringComparison.OrdinalIgnoreCase)
+                || r.TagName.StartsWith("agent-", StringComparison.OrdinalIgnoreCase);
+            withExe.Add((r.TagName, version, exe.BrowserDownloadUrl, sha, isAgent));
+        }
+
+        if (withExe.Count == 0) return null;
+
+        IEnumerable<(string Tag, string Version, string Url, string? Sha, bool IsAgentTag)> pool =
+            withExe.Exists(x => x.IsAgentTag) ? withExe.Where(x => x.IsAgentTag) : withExe;
+
+        var best = pool
+            .OrderByDescending(x => x.Version, Comparer<string>.Create(CompareSemVer))
+            .First();
+
+        return new LatestRelease(best.Version, best.Url, best.Sha);
+    }
+
+    private static GhAsset? PickExeAsset(IReadOnlyList<GhAsset> assets)
+    {
+        foreach (GhAsset a in assets)
+        {
+            if (a.Name is not null &&
+                a.Name.StartsWith("GameNightAgent", StringComparison.OrdinalIgnoreCase) &&
+                a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                return a;
+        }
+        foreach (GhAsset a in assets)
+        {
+            if (a.Name is not null &&
+                a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                return a;
+        }
+        return null;
+    }
+
+    private static string? ExtractSha(GhAsset asset, string? body)
+    {
+        if (!string.IsNullOrWhiteSpace(asset.Digest))
+            return NormalizeSha256(asset.Digest);
+        if (string.IsNullOrEmpty(body)) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(
+            body, @"AGENT_SHA256=([a-fA-F0-9]{64})");
+        return m.Success ? m.Groups[1].Value.ToLowerInvariant() : null;
     }
 
     public static int CompareSemVer(string a, string b)
@@ -241,7 +361,6 @@ public static class Updater
                 resp.EnsureSuccessStatusCode();
                 long? total = resp.Content.Headers.ContentLength;
 
-                // Close writers before rename — Windows won't Move an open file.
                 {
                     await using var input = await resp.Content.ReadAsStreamAsync();
                     await using var output = new FileStream(
@@ -386,5 +505,21 @@ public static class Updater
     {
         AgentLog.Write("update.log", msg);
         Debug.WriteLine($"[Updater] {msg}");
+    }
+
+    internal sealed class GhRelease
+    {
+        [JsonPropertyName("tag_name")] public string? TagName { get; set; }
+        [JsonPropertyName("body")] public string? Body { get; set; }
+        [JsonPropertyName("draft")] public bool Draft { get; set; }
+        [JsonPropertyName("prerelease")] public bool Prerelease { get; set; }
+        [JsonPropertyName("assets")] public List<GhAsset>? Assets { get; set; }
+    }
+
+    internal sealed class GhAsset
+    {
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("browser_download_url")] public string? BrowserDownloadUrl { get; set; }
+        [JsonPropertyName("digest")] public string? Digest { get; set; }
     }
 }

@@ -73,11 +73,12 @@ export function Setup() {
           </a>
         ) : (
           <span className="muted">
-            Agent download not configured — ask the admin.
+            Could not load the latest GitHub release — try again shortly.
           </span>
         )}
         <p className="muted" style={{ fontSize: ".85rem" }}>
-          Windows will warn about an unrecognized app — click{" "}
+          Always the latest release from GitHub. Windows will warn about an
+          unrecognized app — click{" "}
           <em>More info → Run anyway</em>. It's safe; it's unsigned. Then
           generate a link code on the Home page and paste it in.
         </p>

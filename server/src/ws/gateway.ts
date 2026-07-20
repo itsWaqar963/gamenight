@@ -181,12 +181,14 @@ export function attachGateway(opts: {
               .update(devices)
               .set({ lastSeen: new Date(), agentVersion: msg.agentVersion ?? null })
               .where(eq(devices.id, row.device.id));
-            sock.send(JSON.stringify({
-              t: 'hello_ok',
-              deviceId: row.device.id,
-              userId: row.user.id,
-              role: row.user.role === 'admin' ? 'admin' : 'member',
-            }));
+            sock.send(
+              JSON.stringify({
+                t: 'hello_ok',
+                deviceId: row.device.id,
+                userId: row.user.id,
+                role: row.user.role === 'admin' ? 'admin' : 'member',
+              }),
+            );
             sendPeersToAgents(); // tell this agent (and refresh others) who to probe
             return;
           }

@@ -134,17 +134,21 @@ export function Home({ me }: { me: Me }) {
 }
 
 function LinkDevice() {
-  // Agent download metadata comes from the server (which reads it from env,
-  // pointing at a GitHub Release). If unconfigured, the download step hides
-  // itself gracefully rather than showing a dead button.
+  // Latest agent build from GitHub Releases (via GET /api/v1/agent/latest →
+  // itsWaqar963/gamenight). Refetch periodically so the button tracks new tags.
   const release = useQuery({
     queryKey: ["agent-latest"],
-    queryFn: () =>
-      fetch("/api/v1/agent/latest").then((r) => r.json()) as Promise<{
+    queryFn: async () => {
+      const r = await fetch("/api/v1/agent/latest");
+      return (await r.json()) as {
         version: string | null;
         url: string | null;
         sha256: string | null;
-      }>,
+        error?: string | null;
+      };
+    },
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
   });
 
   const link = useQuery({
@@ -158,6 +162,7 @@ function LinkDevice() {
   });
 
   const downloadUrl = release.data?.url ?? null;
+  const versionLabel = release.data?.version ?? null;
 
   return (
     <div className="card">
@@ -173,17 +178,20 @@ function LinkDevice() {
           <>
             <a className="btn" href={downloadUrl}>
               Download GameNight agent
-              {release.data?.version ? ` (${release.data.version})` : ""}
+              {versionLabel ? ` (${versionLabel})` : ""}
             </a>
             <br />
             <span className="muted" style={{ fontSize: ".85rem" }}>
-              Windows will warn about an unrecognized app — click{" "}
-              <em>More info → Run anyway</em>. It's safe; it's just unsigned.
+              Always the latest release from GitHub. Windows may warn about an
+              unrecognized app — click <em>More info → Run anyway</em>.
             </span>
           </>
         ) : (
           <span className="muted">
-            Download link not configured yet — ask the admin for the agent file.
+            {release.isLoading
+              ? "Loading latest agent release…"
+              : release.data?.error ??
+                "Could not load the latest GitHub release — try again shortly."}
           </span>
         )}
       </p>
